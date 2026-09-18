@@ -2,13 +2,15 @@
 
 An [Agent Skill](https://agentskills.io/specification) for Git-versioned secrets encrypted with SOPS and age, independent of the private-key provider.
 
-## Install (pi)
+## Install
+
+Clone this repository into an Agent Skills directory. For pi:
 
 ```sh
-pi install git:github.com/spoj/sops-age
+git clone https://github.com/spoj/sops-age.git ~/.pi/agent/skills/sops-age
 ```
 
-Requires SOPS 3.10+ and age. See [SKILL.md](SKILL.md).
+Requires SOPS and age. See [SKILL.md](SKILL.md).
 
 ## License
 
