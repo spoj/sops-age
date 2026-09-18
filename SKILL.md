@@ -1,49 +1,59 @@
 ---
 name: sops-age
-description: Set up and use Git-versioned SOPS files encrypted to age recipients, with private identities supplied at runtime by any provider. Use when configuring, editing, consuming, validating, or rekeying encrypted repository files.
-compatibility: Requires SOPS 3.10+ and age.
+description: Configure and use Git-versioned files encrypted with SOPS and age. Use when secret-bearing files must live in Git as ciphertext, when a repository already uses SOPS age files, or when its age recipients change. Ask before introducing this workflow to a repository.
+compatibility: Requires SOPS and age.
 ---
 
 # SOPS + age
 
-- Commit only SOPS ciphertext, `.sops.yaml`, and age public recipients.
-- Keep private identities outside the repository. Do not emit identities or plaintext into agent output.
-- Supply identities at runtime with `SOPS_AGE_KEY`, `SOPS_AGE_KEY_FILE`, or `SOPS_AGE_KEY_CMD`.
+## Perimeter
 
-## Configure
+Use this skill when a file needs both encryption and Git history, such as a deployment configuration or credentials file. If it does not need Git history, keep it in the secret provider instead.
 
-Have the user create and store the age identity outside agent-captured output. Use only its public recipient in `.sops.yaml`:
+For a new setup, first propose the encrypted paths, recipient ownership, and key provider. Ask the user before creating keys or repository files.
 
-```yaml
-creation_rules:
-  - path_regex: ^secrets/.*\.sops(\.(yaml|yml|json|env|ini))?$
-    age: age1replace_with_public_recipient
-```
+## Workflow
 
-Ignore plaintext secret paths in Git.
+1. **Approve the boundary.** Inspect existing conventions and agree with the user on the plaintext boundary, ciphertext names, recipients, and provider.
 
-## Use
+   **Milestone:** the user has approved a concrete plan.
 
-Run SOPS under the chosen identity provider:
+2. **Establish and prove encryption.** Have the user store the private age identity outside the repository and agent output. Put only its public recipient in `.sops.yaml`:
 
-```sh
-sops edit secrets/example.sops.yaml
-sops exec-env secrets/example.sops.env '<command>'
-sops exec-file secrets/example.sops.yaml '<command using {}>'
-```
+   ```yaml
+   creation_rules:
+     - path_regex: ^secrets/.*\.sops\.yaml$
+       age: age1replace_with_public_recipient
+   ```
 
-Do not decrypt into the repository. Before committing, check every changed secret with `sops filestatus`. After changing recipients in `.sops.yaml`, run `sops updatekeys` on every encrypted file.
+   Ignore private-key and plaintext paths while allowing the approved ciphertext paths.
 
-### 1Password example
+   The provider only needs to supply the identity while SOPS runs. For example:
 
-Store the age identity in 1Password and map it in `.sops.env`:
+   ```dotenv
+   # .sops.env
+   SOPS_AGE_KEY=op://<vault>/<item>/<field>
+   ```
 
-```dotenv
-SOPS_AGE_KEY=op://<vault>/<item>/<field>
-```
+   ```sh
+   op run --env-file=.sops.env -- sops edit secrets/check.sops.yaml
+   sops filestatus secrets/check.sops.yaml
+   op run --env-file=.sops.env -- sops decrypt secrets/check.sops.yaml > /dev/null
+   ```
 
-Then prefix SOPS commands with:
+   **Milestone:** `filestatus` reports `encrypted: true`, decryption succeeds without printing plaintext, and no private identity or plaintext secret is in the repository.
 
-```sh
-op run --env-file=.sops.env -- sops ...
-```
+3. **Operate and verify.** Edit or pass plaintext to a process through SOPS; never decrypt into the repository.
+
+   ```sh
+   sops edit secrets/app.sops.yaml
+   sops filestatus secrets/app.sops.yaml
+   git add secrets/app.sops.yaml
+   git diff --quiet -- secrets/app.sops.yaml
+   ```
+
+   Run identity-requiring commands through the provider.
+
+   **Milestone:** the requested change exists only as ciphertext, `filestatus` reports `encrypted: true`, and the staged file matches the verified worktree file.
+
+When recipients change, update `.sops.yaml`, run `sops updatekeys` on every encrypted file, and repeat the relevant milestones. When revoking an identity, also rotate the data key and underlying secrets.
