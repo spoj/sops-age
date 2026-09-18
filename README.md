@@ -5,7 +5,7 @@ An [Agent Skill](https://agentskills.io/specification) for Git-versioned secrets
 ## Install (pi)
 
 ```sh
-git clone https://github.com/spoj/sops-age.git ~/.pi/agent/skills/sops-age
+pi install git:github.com/spoj/sops-age
 ```
 
 Requires SOPS 3.10+ and age. See [SKILL.md](SKILL.md).
