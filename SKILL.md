@@ -10,50 +10,57 @@ compatibility: Requires SOPS and age.
 
 Use this skill when a file needs both encryption and Git history, such as a deployment configuration or credentials file. If it does not need Git history, keep it in the secret provider instead.
 
-For a new setup, first propose the encrypted paths, recipient ownership, and key provider. Ask the user before creating keys or repository files.
+A new setup begins only after the user approves the encrypted paths, recipient ownership, and key provider.
 
-## Workflow
+## Milestones
 
-1. **Approve the boundary.** Inspect existing conventions and agree with the user on the plaintext boundary, ciphertext names, recipients, and provider.
+### Approved boundary
 
-   **Milestone:** the user has approved a concrete plan.
+The files requiring encryption, their ciphertext names, the age recipients, and the private-identity provider are explicit and consistent with existing repository conventions.
 
-2. **Establish and prove encryption.** Have the user store the private age identity outside the repository and agent output. Put only its public recipient in `.sops.yaml`:
+**Complete when:** the user has approved that boundary.
 
-   ```yaml
-   creation_rules:
-     - path_regex: ^secrets/.*\.sops\.yaml$
-       age: age1replace_with_public_recipient
-   ```
+### Proven encryption path
 
-   Ignore private-key and plaintext paths while allowing the approved ciphertext paths.
+The private identity stays outside the repository and agent output. Only its public recipient appears in `.sops.yaml`:
 
-   The provider only needs to supply the identity while SOPS runs. For example:
+```yaml
+creation_rules:
+  - path_regex: ^secrets/.*\.sops\.yaml$
+    age: age1replace_with_public_recipient
+```
 
-   ```dotenv
-   # .sops.env
-   SOPS_AGE_KEY=op://<vault>/<item>/<field>
-   ```
+Plaintext and private-key paths are ignored; the intended ciphertext paths are allowed.
 
-   ```sh
-   op run --env-file=.sops.env -- sops edit secrets/check.sops.yaml
-   sops filestatus secrets/check.sops.yaml
-   op run --env-file=.sops.env -- sops decrypt secrets/check.sops.yaml > /dev/null
-   ```
+A provider supplies the identity only while SOPS runs. For example:
 
-   **Milestone:** `filestatus` reports `encrypted: true`, decryption succeeds without printing plaintext, and no private identity or plaintext secret is in the repository.
+```dotenv
+# .sops.env
+SOPS_AGE_KEY=op://<vault>/<item>/<field>
+```
 
-3. **Operate and verify.** Edit or pass plaintext to a process through SOPS; never decrypt into the repository.
+```sh
+op run --env-file=.sops.env -- sops edit secrets/check.sops.yaml
+sops filestatus secrets/check.sops.yaml
+op run --env-file=.sops.env -- sops decrypt secrets/check.sops.yaml > /dev/null
+```
 
-   ```sh
-   sops edit secrets/app.sops.yaml
-   sops filestatus secrets/app.sops.yaml
-   git add secrets/app.sops.yaml
-   git diff --quiet -- secrets/app.sops.yaml
-   ```
+**Complete when:** `filestatus` reports `encrypted: true`, decryption succeeds without printing plaintext, and the repository contains neither the private identity nor plaintext secrets.
 
-   Run identity-requiring commands through the provider.
+### Commit-ready ciphertext
 
-   **Milestone:** the requested change exists only as ciphertext, `filestatus` reports `encrypted: true`, and the staged file matches the verified worktree file.
+Changes stay behind SOPS:
 
-When recipients change, update `.sops.yaml`, run `sops updatekeys` on every encrypted file, and repeat the relevant milestones. When revoking an identity, also rotate the data key and underlying secrets.
+```sh
+sops edit secrets/app.sops.yaml
+sops exec-env secrets/app.sops.yaml '<command>'
+sops filestatus secrets/app.sops.yaml
+git add secrets/app.sops.yaml
+git diff --quiet -- secrets/app.sops.yaml
+```
+
+Identity-requiring SOPS commands execute under the provider.
+
+**Complete when:** the requested change exists only as ciphertext, `filestatus` reports `encrypted: true`, and the staged file matches the verified worktree file.
+
+A recipient change is complete when `.sops.yaml` and every encrypted file agree after `sops updatekeys`. Revoking an identity also requires rotating the data key and underlying secrets because old Git history remains decryptable by that identity.
